@@ -1,19 +1,23 @@
 export const fileManager = {
-  // Get available tests from the tests folder
+  // Get available tests from the public/tests folder
   async getAvailableTests() {
     try {
-      // In a real file system environment, this would read the tests directory
-      // For now, we'll simulate with localStorage or provide fallback data
-      
-      const tests = []
-      
-      // Try to get from localStorage first (for browser-based file handling)
-      const storedTests = localStorage.getItem('availableTests')
-      console.log('Retrieving available tests from localStorage')
-      console.log('Stored tests data:', storedTests)
-      if (storedTests) {
-        return JSON.parse(storedTests)
+      // Try to load manifest.json first (faster and more reliable)
+      try {
+        const response = await fetch('/tests/manifest.json')
+        if (response.ok) {
+          const manifest = await response.json()
+          console.log(`Loaded ${manifest.tests.length} tests from manifest.json`)
+          return manifest.tests
+        }
+      } catch (manifestError) {
+        console.log('No manifest.json found, will scan directory')
       }
+      
+      // Fallback: try to auto-discover tests (requires a known list or server-side support)
+      // For now, return empty array if no manifest exists
+      console.warn('No manifest.json found. Please create one or run the generate-manifest script.')
+      return []
       
     } catch (error) {
       console.error('Error getting available tests:', error)
@@ -24,48 +28,26 @@ export const fileManager = {
   // Load test content from file
   async loadTestContent(filename) {
     try {
-      // Try localStorage first
-      const content = localStorage.getItem(`test_${filename}`)
-      if (content) {
-        return content
+      const response = await fetch(`/tests/${filename}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
       
-      // Try File System Access API (modern browsers)
-      if ('showOpenFilePicker' in window) {
-        return await this.loadFromFileSystem(filename)
-      }
+      const content = await response.text()
+      console.log(`Loaded test content for: ${filename}`)
+      return content
       
-      throw new Error('Test file not found: ' + filename)
     } catch (error) {
       console.error('Error loading test content:', error)
-      throw error
+      throw new Error(`Failed to load test: ${filename}`)
     }
   },
   
-  // Load from File System Access API
-  async loadFromFileSystem(filename) {
-    try {
-      const [fileHandle] = await window.showOpenFilePicker({
-        types: [
-          {
-            description: 'Questionary files',
-            accept: {
-              'text/plain': ['.questionary']
-            }
-          }
-        ]
-      })
-      
-      const file = await fileHandle.getFile()
-      const content = await file.text()
-      
-      // Cache in localStorage
-      localStorage.setItem(`test_${filename}`, content)
-      
-      return content
-    } catch (error) {
-      throw new Error('Error accessing file system: ' + error.message)
-    }
+  // Refresh available tests (re-reads manifest.json)
+  async refreshTests() {
+    console.log('Refreshing test list...')
+    return await this.getAvailableTests()
   },
   
   // Save completed quiz
@@ -154,66 +136,6 @@ export const fileManager = {
     }
   },
   
-  // Import tests from file input
-  async importTests(files) {
-    const imported = []
-    const errors = []
-    
-    for (const file of files) {
-      try {
-        if (!file.name.endsWith('.questionary')) {
-          errors.push(`${file.name}: Invalid file extension. Use .questionary`)
-          continue
-        }
-        
-        const content = await file.text()
-        
-        // Validate content
-        const { isValid, errors: validationErrors } = await import('./questionaryParser.js')
-          .then(module => module.questionaryParser.validate(content))
-        
-        if (!isValid) {
-          errors.push(`${file.name}: ${validationErrors.join(', ')}`)
-          continue
-        }
-        
-        // Store in localStorage
-        localStorage.setItem(`test_${file.name}`, content)
-        
-        // Extract metadata for test list
-        const lines = content.split('\n')
-        const title = lines.find(l => l.startsWith('###'))?.replace('###', '').trim() || file.name
-        const subtitle = lines.find(l => l.startsWith('##'))?.replace('##', '').trim() || ''
-        const duration = lines.find(l => l.startsWith('@duration'))?.split(':')[1]?.trim() || '15min'
-        const difficulty = lines.find(l => l.startsWith('@difficulty'))?.split(':')[1]?.trim() || 'medio'
-        const topics = lines.find(l => l.startsWith('@topics'))?.split(':')[1]?.split(',').map(s => s.trim()) || []
-        
-        imported.push({
-          filename: file.name,
-          title,
-          subtitle,
-          duration,
-          difficulty,
-          topics,
-          lastModified: new Date(file.lastModified).toISOString(),
-          size: this.formatFileSize(file.size)
-        })
-        
-      } catch (error) {
-        errors.push(`${file.name}: ${error.message}`)
-      }
-    }
-    
-    // Update available tests list
-    if (imported.length > 0) {
-      const currentTests = await this.getAvailableTests()
-      const allTests = [...currentTests.filter(t => !imported.find(i => i.filename === t.filename)), ...imported]
-      localStorage.setItem('availableTests', JSON.stringify(allTests))
-    }
-    
-    return { imported, errors }
-  },
-  
   // Export test results
   async exportResults(results, format = 'json') {
     try {
@@ -279,5 +201,4 @@ export const fileManager = {
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   },
-  
 }

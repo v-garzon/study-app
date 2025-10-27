@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "generatedAt": "2025-10-27T13:00:56.184Z",
+  "totalTests": 1,
+  "tests": [
+    {
+      "filename": "1.0_maes_repaso_general.questionary",
+      "title": "Materials Estructurals - Test General - 1",
+      "subtitle": "# Materials Estructurals - Test General - 1",
+      "duration": "30min",
+      "difficulty": "medio",
+      "topics": [
+        "Tema1",
+        "Tema2",
+        "Tema3"
+      ],
+      "lastModified": "2025-10-27T13:00:50.530Z",
+      "size": "5.7 KB"
+    }
+  ]
+}
